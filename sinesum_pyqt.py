@@ -55,8 +55,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('sinesum_pyqt.log', mode='a')
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -128,7 +127,7 @@ class PlotCanvas(FigureCanvas):
             self.ax_spec.scatter([hc], [pc], [ac], s=60)
         self.ax_spec.set_xlim(0, N + 1)
         self.ax_spec.set_ylim(0, 2*np.pi)
-        zmax = (np.max(A) if N else 0) + 1.0
+        zmax = (np.max(A) if N else 0) * 1.1
         self.ax_spec.set_zlim(0, zmax)
 
         self.draw_idle()
@@ -407,7 +406,7 @@ class SineSumWindow(QMainWindow):
             QMessageBox.information(self, "Library Error", f"Sound Device Library not found.\n Install 'sounddevice' via pip.")
 
     def on_save_audio(self):
-        fname, _ = QFileDialog.getSaveFileName(self, "Save WAV Audio", "sinesum2_output.wav", "WAV (*.wav)")
+        fname, _ = QFileDialog.getSaveFileName(self, "Save WAV Audio", "sinesum2_sound.wav", "WAV (*.wav)")
         if not fname: 
             logger.info("Audio save cancelled by user")
             return

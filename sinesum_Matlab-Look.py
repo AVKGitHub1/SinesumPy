@@ -28,8 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('sinesum2_matlablook.log', mode='a')
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -111,6 +110,7 @@ class SineSumApp:
 
         # Play button centered under sliders
         self.btn_play = ClassicButton(self.fig.add_axes([0.46, 0.705, 0.12, 0.04]), "Play Sound")
+        self.btn_save_sound = ClassicButton(self.fig.add_axes([0.6, 0.705, 0.12, 0.04]), "Save Sound")
 
         # --- Left column: listbox (top) & spectral profile (bottom) ---
         self.ax_list = self.fig.add_axes([0.10, 0.49, 0.30, 0.20]); self.ax_list.axis("off")
@@ -138,6 +138,7 @@ class SineSumApp:
         self.tb_phase.on_submit(self.cb_phase_edit)
 
         self.btn_play.on_clicked(self.cb_play)
+        self.btn_save_sound.on_clicked(self.cb_save_sound)
         self.btn_save.on_clicked(self.cb_save)
         self.btn_load.on_clicked(self.cb_load)
         self.btn_about.on_clicked(self.cb_about)
@@ -325,17 +326,76 @@ class SineSumApp:
             sd.play(x, samplerate=self.Fs, blocking=False)
             logger.info(f"Playing audio via sounddevice: {self.num_seconds}s at {self.Fs}Hz")
         else:
-            path = "sinesum2_output.wav"
-            logger.warning("sounddevice not available, writing WAV file instead")
-            if _SCIPY_WAV_OK:
-                wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
-                logger.info(f"Wrote WAV file using scipy: {os.path.abspath(path)}")
+            try:
+                import tkinter as tk
+                from tkinter import messagebox
+                root = tk.Tk()
+                root.withdraw()  # Hide the main window
+                messagebox.showinfo(
+                    "Warning",
+                    "sounddevice not available, cannot play audio.\nInstall using 'pip install sounddevice'"
+                )
+                root.destroy()
+            except ImportError:
+                logger.warning("tkinter not available, cannot show message box")
+            logger.warning("sounddevice not available, cannot play audio. install using 'pip install sounddevice'")
+    
+    def cb_save_sound(self, _):
+        # Import tkinter for file dialog
+        TK_Installed = False
+        try:
+            import tkinter as tk
+            TK_Installed = True
+            from tkinter import filedialog
+            
+            # Create a temporary root window (hidden)
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            
+            # Get the directory of the current Python file
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Open file dialog to save JSON file
+            fname = filedialog.asksaveasfilename(
+                title="Save Sine Sum Project",
+                initialdir=script_dir,
+                defaultextension=".wav",
+                filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+                initialfile="sinesum2_sound.wav"
+            )
+            
+            # Destroy the temporary root window
+            root.destroy()
+            
+            # If no file was selected, return
+            if not fname:
+                logger.info("Save cancelled by user")
+                return
+                
+        except ImportError:
+            # Fallback to hardcoded filename if tkinter not available
+            fname = "sinesum2_sound.wav"
+            logger.warning("tkinter not available, using default filename")
+        
+        path = fname
+        if _SCIPY_WAV_OK:
+            wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
+            logger.info(f"Wrote WAV file using scipy: {os.path.abspath(path)}")
+        else:
+            if TK_Installed:
+                import tkinter as tk
+                from tkinter import messagebox
+                root = tk.Tk()
+                root.withdraw()  # Hide the main window
+                messagebox.showinfo(
+                    "Warning",
+                    "scipy not available"
+                )
+                root.destroy()
+                logger.warning("scipy not available, cannot save WAV file. install using 'pip install scipy'")
             else:
-                with wave.open(path, "wb") as wf:
-                    wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(self.Fs)
-                    for s in (x * 32767):
-                        wf.writeframesraw(struct.pack("<h", int(np.clip(s, -32768, 32767))))
-                logger.info(f"Wrote WAV file using wave module: {os.path.abspath(path)}")
+                logger.warning("scipy not available, cannot save WAV file. install using 'pip install scipy'")
+            
 
     def cb_save(self, _):
         # Import tkinter for file dialog
