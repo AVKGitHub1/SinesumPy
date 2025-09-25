@@ -127,7 +127,7 @@ class PlotCanvas(FigureCanvas):
             self.ax_spec.scatter([hc], [pc], [ac], s=60)
         self.ax_spec.set_xlim(0, N + 1)
         self.ax_spec.set_ylim(0, 2*np.pi)
-        zmax = (np.max(A) if N else 0) * 1.1
+        zmax = (np.max(A) if N else 0.1) * 1.1
         self.ax_spec.set_zlim(0, zmax)
 
         self.draw_idle()
@@ -470,8 +470,8 @@ class SineSumWindow(QMainWindow):
         logger.info("About dialog opened")
         QMessageBox.information(
             self, "About",
-            "Sum of Sines — PyQt UI with large plots on top and a split controls area:\n"
-            "compact controls on the left, harmonics table on the right."
+            "Matlab code to visualize sum of harmonics adapted to python by Abhishek Karve. \n" \
+            "https://github.com/AVKGitHub1/SinesumPy"
         )
 
 

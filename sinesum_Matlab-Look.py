@@ -109,8 +109,7 @@ class SineSumApp:
         self.tb_phase = TextBox(self.fig.add_axes([0.9, 0.755, 0.08, 0.032]), "", initial="0")
 
         # Play button centered under sliders
-        self.btn_play = ClassicButton(self.fig.add_axes([0.46, 0.705, 0.12, 0.04]), "Play Sound")
-        self.btn_save_sound = ClassicButton(self.fig.add_axes([0.6, 0.705, 0.12, 0.04]), "Save Sound")
+        
 
         # --- Left column: listbox (top) & spectral profile (bottom) ---
         self.ax_list = self.fig.add_axes([0.10, 0.49, 0.30, 0.20]); self.ax_list.axis("off")
@@ -123,7 +122,9 @@ class SineSumApp:
         # Menu-ish buttons (Save/Load/About) tucked near listbox
         self.btn_save = ClassicButton(self.fig.add_axes([0.10, 0.705, 0.09, 0.04]), "Save")
         self.btn_load = ClassicButton(self.fig.add_axes([0.20, 0.705, 0.09, 0.04]), "Load")
-        self.btn_about = ClassicButton(self.fig.add_axes([0.30, 0.705, 0.09, 0.04]), "About")
+        self.btn_play = ClassicButton(self.fig.add_axes([0.30, 0.705, 0.09, 0.04]), "Play Sound")
+        self.btn_save_sound = ClassicButton(self.fig.add_axes([0.40, 0.705, 0.09, 0.04]), "Save Sound")
+        self.btn_about = ClassicButton(self.fig.add_axes([0.50, 0.705, 0.09, 0.04]), "About")
 
         # Wiring callbacks
         self.btn_start.on_clicked(self.cb_start_over)
@@ -517,7 +518,8 @@ class SineSumApp:
             # Show info message box
             messagebox.showinfo(
                 "About",
-                "Matlab code to generate harmonics adapted to python by Abhishek."
+                "Matlab code to visualize sum of harmonics adapted to python by Abhishek Karve. \n" \
+                "https://github.com/AVKGitHub1/SinesumPy"
             )
             
             # Destroy the temporary root window
