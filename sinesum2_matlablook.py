@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider, TextBox
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
-import json, os, wave, struct
+import json, os, wave, struct, logging, sys
 
 # Optional audio backends
 _SD_OK = False
@@ -23,6 +23,16 @@ try:
 except Exception:
     _SCIPY_WAV_OK = False
 
+# ---- Logger setup ----
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('sinesum2_matlablook.log', mode='a')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 MATLAB_GRAY = (0.85, 0.85, 0.85)
 EDGE_GRAY = (0.4, 0.4, 0.4)
@@ -52,11 +62,13 @@ class ClassicButton(Button):
 
 class SineSumApp:
     def __init__(self):
+        logger.info("Initializing SineSumApp")
         # state mirrors MATLAB handles.*
         self.num_harmonics = 1
         self.current_harmonic = 1  # 1-indexed
         self.amplitudes = np.zeros(self.num_harmonics)
         self.phases = np.zeros(self.num_harmonics)
+        logger.debug(f"Initial state: {self.num_harmonics} harmonics, current harmonic: {self.current_harmonic}")
 
         # timebase for plots
         self.maxT = 2.0
@@ -138,6 +150,7 @@ class SineSumApp:
     # ---------- state helpers ----------
     def _resize(self, new_n):
         new_n = max(1, int(new_n))
+        old_num = self.num_harmonics
         oldA, oldP = self.amplitudes, self.phases
         self.amplitudes = np.zeros(new_n)
         self.phases = np.zeros(new_n)
@@ -146,6 +159,7 @@ class SineSumApp:
         self.phases[:m] = oldP[:m]
         self.num_harmonics = new_n
         self.current_harmonic = 1
+        logger.debug(f"Resized state from {old_num} to {new_n} harmonics, preserved {m} values")
 
     def _sync_nav_enabled(self):
         self.btn_prev.set_enabled(self.current_harmonic > 1)
@@ -229,7 +243,9 @@ class SineSumApp:
 
     # ---------- callbacks ----------
     def cb_start_over(self, _):
-        self._resize(self._parse_int(self.tb_num.text, default=1))
+        new_harmonics = self._parse_int(self.tb_num.text, default=1)
+        logger.info(f"Starting over with {new_harmonics} harmonics")
+        self._resize(new_harmonics)
         self._sync_nav_enabled()
         self._push_to_controls()
         self._update_display()
@@ -237,6 +253,7 @@ class SineSumApp:
     def cb_prev(self, _):
         if self.current_harmonic > 1:
             self.current_harmonic -= 1
+            logger.debug(f"Navigation: Previous harmonic selected ({self.current_harmonic})")
             self._sync_nav_enabled()
             self._push_to_controls()
             self._update_display()
@@ -244,6 +261,7 @@ class SineSumApp:
     def cb_next(self, _):
         if self.current_harmonic < self.num_harmonics:
             self.current_harmonic += 1
+            logger.debug(f"Navigation: Next harmonic selected ({self.current_harmonic})")
             self._sync_nav_enabled()
             self._push_to_controls()
             self._update_display()
@@ -262,13 +280,17 @@ class SineSumApp:
         self._update_display()
 
     def cb_amp_slider(self, val):
+        old_val = self.amplitudes[self.current_harmonic-1]
         self.amplitudes[self.current_harmonic-1] = float(val)
         self.tb_amp.set_val(f"{float(val):.6g}")
+        logger.debug(f"Amplitude slider: Harmonic {self.current_harmonic} changed from {old_val:.4f} to {val:.4f}")
         self._update_display()
 
     def cb_phase_slider(self, val):
+        old_val = self.phases[self.current_harmonic-1]
         self.phases[self.current_harmonic-1] = float(val)
         self.tb_phase.set_val(f"{float(val):.6g}")
+        logger.debug(f"Phase slider: Harmonic {self.current_harmonic} changed from {old_val:.4f} to {val:.4f}")
         self._update_display()
 
     def cb_amp_edit(self, text):
@@ -289,26 +311,31 @@ class SineSumApp:
         self._update_display()
 
     def cb_play(self, _):
+        logger.info(f"Playing audio with {self.num_harmonics} harmonics, f0={self.f0}Hz")
         t = np.arange(0, self.num_seconds, 1/self.Fs)
         x = np.zeros_like(t)
         for n in range(1, self.num_harmonics+1):
             x += self.amplitudes[n-1] * np.sin(2*np.pi*n*self.f0*t + self.phases[n-1])
         denom = np.max(np.abs(x)) + 0.05
         x = (x/denom).astype(np.float32)
+        logger.debug(f"Generated audio signal: {len(x)} samples, max amplitude: {np.max(np.abs(x)):.4f}")
 
         if _SD_OK:
             sd.stop(ignore_errors=True)
             sd.play(x, samplerate=self.Fs, blocking=False)
+            logger.info(f"Playing audio via sounddevice: {self.num_seconds}s at {self.Fs}Hz")
         else:
             path = "sinesum2_output.wav"
+            logger.warning("sounddevice not available, writing WAV file instead")
             if _SCIPY_WAV_OK:
                 wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
+                logger.info(f"Wrote WAV file using scipy: {os.path.abspath(path)}")
             else:
                 with wave.open(path, "wb") as wf:
                     wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(self.Fs)
                     for s in (x * 32767):
                         wf.writeframesraw(struct.pack("<h", int(np.clip(s, -32768, 32767))))
-            print(f"[Info] sounddevice not available; wrote {os.path.abspath(path)}")
+                logger.info(f"Wrote WAV file using wave module: {os.path.abspath(path)}")
 
     def cb_save(self, _):
         # Import tkinter for file dialog
@@ -337,21 +364,22 @@ class SineSumApp:
             
             # If no file was selected, return
             if not fname:
-                print("[Info] Save cancelled.")
+                logger.info("Save cancelled by user")
                 return
                 
         except ImportError:
             # Fallback to hardcoded filename if tkinter not available
             fname = "sinesum2_project.json"
-            print("[Info] tkinter not available, using default filename.")
+            logger.warning("tkinter not available, using default filename")
         
+        logger.info(f"Saving project to: {fname}")
         try:
             data = {"Amplitudes": self.amplitudes.tolist(), "Phases": self.phases.tolist()}
             with open(fname, "w") as f:
                 json.dump(data, f, indent=2)
-            print(f"[Saved] {os.path.basename(fname)}")
+            logger.info(f"Successfully saved project: {os.path.basename(fname)} with {self.num_harmonics} harmonics")
         except Exception as e:
-            print(f"[Error] Could not save file {fname}: {e}")
+            logger.error(f"Could not save file {fname}: {e}")
 
     def cb_load(self, _):
         # Import tkinter for file dialog
@@ -379,33 +407,35 @@ class SineSumApp:
             
             # If no file was selected, return
             if not fname:
-                print("[Info] No file selected.")
+                logger.info("Load cancelled by user")
                 return
                 
         except ImportError:
             # Fallback to hardcoded filename if tkinter not available
             fname = "sinesum2_project.json"
-            print("[Info] tkinter not available, using default filename.")
+            logger.warning("tkinter not available, using default filename")
         
         if not os.path.exists(fname):
-            print(f"[Error] File {fname} not found.")
+            logger.error(f"File {fname} not found")
             return
             
+        logger.info(f"Loading project from: {fname}")
         try:
             with open(fname) as f:
                 d = json.load(f)
         except json.JSONDecodeError:
-            print(f"[Error] Invalid JSON file: {fname}")
+            logger.error(f"Invalid JSON file: {fname}")
             return
         except Exception as e:
-            print(f"[Error] Could not read file {fname}: {e}")
+            logger.error(f"Could not read file {fname}: {e}")
             return
             
         A = np.array(d.get("Amplitudes", []), float)
         P = np.array(d.get("Phases", []), float)
         if len(A) == 0 or len(A) != len(P):
-            print("[Error] Invalid file (Amplitudes/Phases missing or mismatched).")
+            logger.error(f"Invalid file format: Amplitudes={len(A)}, Phases={len(P)}")
             return
+        logger.info(f"Successfully loaded project with {len(A)} harmonics")
         self._resize(len(A))
         self.amplitudes[:] = A
         self.phases[:] = P
@@ -413,7 +443,6 @@ class SineSumApp:
         self._sync_nav_enabled()
         self._push_to_controls()
         self._update_display()
-        print(f"[Loaded] {os.path.basename(fname)}")
 
     def cb_about(self, _):
         # Show about dialog
@@ -436,7 +465,7 @@ class SineSumApp:
             
         except ImportError:
             # Fallback to console print if tkinter not available
-            print("About: Matlab code to generate harmonics adapted to python by Abhishek.")
+            logger.info("About dialog opened (tkinter not available): Matlab code to generate harmonics adapted to python by Abhishek.")
 
     # ---------- utils ----------
     @staticmethod
@@ -462,4 +491,7 @@ class SineSumApp:
 
 
 if __name__ == "__main__":
-    SineSumApp().run()
+    logger.info("Starting Sum of Sines matplotlib application")
+    app = SineSumApp()
+    logger.info("Application window created, starting GUI")
+    app.run()

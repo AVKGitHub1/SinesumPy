@@ -4,7 +4,7 @@
 # Works with PyQt6 or PyQt5 (auto-fallback).
 
 from __future__ import annotations
-import json, os, sys, math, wave, struct
+import json, os, sys, math, logging
 import numpy as np
 import matplotlib
 matplotlib.use("QtAgg")
@@ -37,6 +37,7 @@ try:
 except Exception:
     _SD_OK = False
 
+
 _SCIPY_WAV_OK = False
 try:
     from scipy.io import wavfile
@@ -48,6 +49,17 @@ except Exception:
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
+
+# ---- Logger setup ----
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('sinesum_pyqt.log', mode='a')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 def zero_line(ax):
@@ -125,6 +137,7 @@ class PlotCanvas(FigureCanvas):
 class SineSumWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        logger.info("Initializing SineSumWindow")
         self.setWindowTitle("Sum of Sines (PyQt)")
         self.resize(1300, 820)
 
@@ -133,6 +146,7 @@ class SineSumWindow(QMainWindow):
         self.current_harmonic = 1  # 1-indexed UI
         self.amplitudes = np.zeros(self.num_harmonics, dtype=float)
         self.phases = np.zeros(self.num_harmonics, dtype=float)
+        logger.debug(f"Initial state: {self.num_harmonics} harmonics, current harmonic: {self.current_harmonic}")
 
         self.maxT = 2.0
         self.dt = 1/200.0
@@ -213,9 +227,11 @@ class SineSumWindow(QMainWindow):
         self.btn_load = QPushButton("Load"); self.btn_load.setFixedWidth(70)
         self.btn_about = QPushButton("About"); self.btn_about.setFixedWidth(70)
         self.btn_play = QPushButton("Play Sound"); self.btn_play.setFixedWidth(110)
+        self.btn_save_sound = QPushButton("Save WAV"); self.btn_save_sound.setFixedWidth(90)
         btn_row.addWidget(self.btn_save); btn_row.addWidget(self.btn_load); btn_row.addWidget(self.btn_about)
         btn_row.addStretch(1)
         btn_row.addWidget(self.btn_play)
+        btn_row.addWidget(self.btn_save_sound)
         grid.addLayout(btn_row, row, 0, 1, 4)
 
         # RIGHT: Big table
@@ -245,6 +261,7 @@ class SineSumWindow(QMainWindow):
         self.edit_amp.editingFinished.connect(self.on_edit_amp)
         self.edit_phase.editingFinished.connect(self.on_edit_phase)
         self.btn_play.clicked.connect(self.on_play)
+        self.btn_save_sound.clicked.connect(self.on_save_audio)
         self.btn_save.clicked.connect(self.on_save)
         self.btn_load.clicked.connect(self.on_load)
         self.btn_about.clicked.connect(self.on_about)
@@ -292,6 +309,7 @@ class SineSumWindow(QMainWindow):
 
     def _resize_state(self, N):
         N = max(1, int(N))
+        old_num = self.num_harmonics
         oldA, oldP = self.amplitudes, self.phases
         self.amplitudes = np.zeros(N, dtype=float)
         self.phases = np.zeros(N, dtype=float)
@@ -300,6 +318,7 @@ class SineSumWindow(QMainWindow):
         self.phases[:m] = oldP[:m]
         self.num_harmonics = N
         self.current_harmonic = 1
+        logger.debug(f"Resized state from {old_num} to {N} harmonics, preserved {m} values")
 
     # ---------- slots ----------
     def on_change_N(self, val):
@@ -310,89 +329,146 @@ class SineSumWindow(QMainWindow):
 
     def on_prev(self):
         if self.k0 > 0:
-            self.current_harmonic -= 1; self._sync_controls(); self._refresh_table(); self._redraw()
+            self.current_harmonic -= 1
+            logger.debug(f"Navigation: Previous harmonic selected ({self.current_harmonic})")
+            self._sync_controls(); self._refresh_table(); self._redraw()
 
     def on_next(self):
         if self.k0 < self.num_harmonics - 1:
-            self.current_harmonic += 1; self._sync_controls(); self._refresh_table(); self._redraw()
+            self.current_harmonic += 1
+            logger.debug(f"Navigation: Next harmonic selected ({self.current_harmonic})")
+            self._sync_controls(); self._refresh_table(); self._redraw()
 
     def on_combo_changed(self, idx):
         if idx < 0: return
-        self.current_harmonic = idx + 1; self._sync_controls(); self._refresh_table(); self._redraw()
+        old_harmonic = self.current_harmonic
+        self.current_harmonic = idx + 1
+        logger.debug(f"Combo selection: Changed from harmonic {old_harmonic} to {self.current_harmonic}")
+        self._sync_controls(); self._refresh_table(); self._redraw()
 
     def on_table_clicked(self, row, _col):
-        self.current_harmonic = row + 1; self._sync_controls(); self._refresh_table(); self._redraw()
+        old_harmonic = self.current_harmonic
+        self.current_harmonic = row + 1
+        logger.debug(f"Table selection: Changed from harmonic {old_harmonic} to {self.current_harmonic}")
+        self._sync_controls(); self._refresh_table(); self._redraw()
 
     def on_slider_amp(self, value):
-        a = value / 100.0; self.amplitudes[self.k0] = a; self.edit_amp.setText(f"{a:.6g}")
+        a = value / 100.0
+        old_a = self.amplitudes[self.k0]
+        self.amplitudes[self.k0] = a
+        self.edit_amp.setText(f"{a:.6g}")
+        logger.debug(f"Amplitude slider: Harmonic {self.current_harmonic} changed from {old_a:.4f} to {a:.4f}")
         self._refresh_table(); self._redraw()
 
     def on_slider_phase(self, value):
-        p = value / 1000.0; self.phases[self.k0] = p; self.edit_phase.setText(f"{p:.6g}")
+        p = value / 1000.0
+        old_p = self.phases[self.k0]
+        self.phases[self.k0] = p
+        self.edit_phase.setText(f"{p:.6g}")
+        logger.debug(f"Phase slider: Harmonic {self.current_harmonic} changed from {old_p:.4f} to {p:.4f}")
         self._refresh_table(); self._redraw()
 
     def on_edit_amp(self):
+        old_a = self.amplitudes[self.k0]
         try: a = float(self.edit_amp.text())
-        except Exception: a = self.amplitudes[self.k0]
+        except Exception: 
+            a = old_a
+            logger.warning(f"Invalid amplitude input for harmonic {self.current_harmonic}, reverting to {a:.4f}")
         self.amplitudes[self.k0] = a; self.slider_amp.setValue(int(round(a * 100)))
+        if a != old_a:
+            logger.debug(f"Amplitude edit: Harmonic {self.current_harmonic} changed from {old_a:.4f} to {a:.4f}")
         self._refresh_table(); self._redraw()
 
     def on_edit_phase(self):
+        old_p = self.phases[self.k0]
         try: p = float(self.edit_phase.text())
-        except Exception: p = self.phases[self.k0]
+        except Exception: 
+            p = old_p
+            logger.warning(f"Invalid phase input for harmonic {self.current_harmonic}, reverting to {p:.4f}")
         self.phases[self.k0] = p; self.slider_phase.setValue(int(round((p % (2*math.pi)) * 1000)))
+        if p != old_p:
+            logger.debug(f"Phase edit: Harmonic {self.current_harmonic} changed from {old_p:.4f} to {p:.4f}")
         self._refresh_table(); self._redraw()
 
     def on_play(self):
+        logger.info("Playing audio with current harmonic configuration")
         t = np.arange(0, self.num_seconds, 1/self.Fs)
         x = np.zeros_like(t)
         for n in range(self.num_harmonics):
             x += self.amplitudes[n] * np.sin(2*np.pi*(n+1)*self.f0*t + self.phases[n])
         denom = np.max(np.abs(x)) + 0.05
         x = (x / denom).astype(np.float32)
+        logger.debug(f"Generated audio signal: {len(x)} samples, max amplitude: {np.max(np.abs(x)):.4f}")
         if _SD_OK:
             sd.stop(ignore_errors=True); sd.play(x, samplerate=self.Fs, blocking=False)
+            logger.info(f"Playing audio via sounddevice: {self.num_seconds}s at {self.Fs}Hz")
         else:
-            path = os.path.join(os.getcwd(), "sinesum2_output.wav")
-            if _SCIPY_WAV_OK:
-                wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
-            else:
-                with wave.open(path, "wb") as wf:
-                    wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(self.Fs)
-                    for s in (x * 32767):
-                        wf.writeframesraw(struct.pack("<h", int(np.clip(s, -32768, 32767))))
+            logger.warning("sounddevice library not available for audio playback")
+            QMessageBox.information(self, "Library Error", f"Sound Device Library not found.\n Install 'sounddevice' via pip.")
+
+    def on_save_audio(self):
+        fname, _ = QFileDialog.getSaveFileName(self, "Save WAV Audio", "sinesum2_output.wav", "WAV (*.wav)")
+        if not fname: 
+            logger.info("Audio save cancelled by user")
+            return
+        logger.info(f"Saving audio to: {fname}")
+        t = np.arange(0, self.num_seconds, 1/self.Fs)
+        x = np.zeros_like(t)
+        for n in range(self.num_harmonics):
+            x += self.amplitudes[n] * np.sin(2*np.pi*(n+1)*self.f0*t + self.phases[n])
+        denom = np.max(np.abs(x)) + 0.05
+        x = (x / denom).astype(np.float32)
+        path = fname
+        if _SCIPY_WAV_OK:
+            wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
+            logger.info(f"Successfully saved WAV file: {path}")
             QMessageBox.information(self, "Audio", f"Saved WAV to:\n{path}")
+        else:
+            logger.error("scipy library not available for WAV file saving")
+            QMessageBox.information(self, "Library Error", f"scipy Library not found.\n Install 'scipy' via pip.")
 
     def on_save(self):
         fname, _ = QFileDialog.getSaveFileName(self, "Save Sine Sum Project",
                                                "sinesum2_project.json", "JSON (*.json)")
-        if not fname: return
+        if not fname: 
+            logger.info("Project save cancelled by user")
+            return
+        logger.info(f"Saving project to: {fname}")
         try:
+            data = {"Amplitudes": self.amplitudes.tolist(), "Phases": self.phases.tolist()}
             with open(fname, "w") as f:
-                json.dump({"Amplitudes": self.amplitudes.tolist(),
-                           "Phases": self.phases.tolist()}, f, indent=2)
+                json.dump(data, f, indent=2)
+            logger.info(f"Successfully saved project: {os.path.basename(fname)} with {self.num_harmonics} harmonics")
             QMessageBox.information(self, "Saved", os.path.basename(fname))
         except Exception as e:
+            logger.error(f"Failed to save project file {fname}: {e}")
             QMessageBox.critical(self, "Error", f"Could not save file:\n{e}")
 
     def on_load(self):
         fname, _ = QFileDialog.getOpenFileName(self, "Load Sine Sum Project", "", "JSON (*.json)")
-        if not fname: return
+        if not fname: 
+            logger.info("Project load cancelled by user")
+            return
+        logger.info(f"Loading project from: {fname}")
         try:
             with open(fname) as f:
                 d = json.load(f)
             A = np.array(d.get("Amplitudes", []), float)
             P = np.array(d.get("Phases", []), float)
         except Exception as e:
+            logger.error(f"Failed to read project file {fname}: {e}")
             QMessageBox.critical(self, "Error", f"Could not read file:\n{e}"); return
         if len(A) == 0 or len(A) != len(P):
+            logger.error(f"Invalid project file format: Amplitudes={len(A)}, Phases={len(P)}")
             QMessageBox.critical(self, "Error", "Invalid JSON: need equal-length Amplitudes & Phases."); return
+        logger.info(f"Successfully loaded project with {len(A)} harmonics")
         self._resize_state(len(A))
         self.amplitudes[:] = A; self.phases[:] = P
         self._refresh_combo(); self._sync_controls(); self._refresh_table(); self._redraw()
         QMessageBox.information(self, "Loaded", os.path.basename(fname))
 
     def on_about(self):
+        logger.info("About dialog opened")
         QMessageBox.information(
             self, "About",
             "Sum of Sines — PyQt UI with large plots on top and a split controls area:\n"
@@ -401,9 +477,11 @@ class SineSumWindow(QMainWindow):
 
 
 def main():
+    logger.info("Starting Sum of Sines PyQt application")
     app = QApplication(sys.argv)
     w = SineSumWindow()
     w.show()
+    logger.info("Application window shown, entering event loop")
     sys.exit(app.exec())
 
 if __name__ == "__main__":
