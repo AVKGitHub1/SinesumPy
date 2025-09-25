@@ -9,9 +9,19 @@ import numpy as np
 import matplotlib
 matplotlib.use("QtAgg")
 
+# ---- Logger setup ----
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # ---- Qt bindings (prefer PyQt6; fall back to PyQt5) ----
 try:
-    from PyQt6 import QtCore, QtGui, QtWidgets
+    from PyQt6 import QtWidgets
     from PyQt6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
         QLabel, QPushButton, QComboBox, QSpinBox, QSlider, QTableWidget,
@@ -19,15 +29,18 @@ try:
     )
     from PyQt6.QtCore import Qt
     PYQT6 = True
-except Exception:
-    from PyQt5 import QtCore, QtGui, QtWidgets
-    from PyQt5.QtWidgets import (
-        QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-        QLabel, QPushButton, QComboBox, QSpinBox, QSlider, QTableWidget,
-        QTableWidgetItem, QFileDialog, QMessageBox, QLineEdit, QGroupBox
-    )
-    from PyQt5.QtCore import Qt
-    PYQT6 = False
+except ImportError:
+    try:
+        from PyQt5 import QtWidgets
+        from PyQt5.QtWidgets import (
+            QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+            QLabel, QPushButton, QComboBox, QSpinBox, QSlider, QTableWidget,
+            QTableWidgetItem, QFileDialog, QMessageBox, QLineEdit, QGroupBox
+        )
+        from PyQt5.QtCore import Qt
+        PYQT6 = False
+    except ImportError:
+        logger.error("PyQt6 or PyQt5 is required to run this application.")
 
 # ---- Optional audio backends ----
 _SD_OK = False
@@ -439,15 +452,15 @@ class SineSumWindow(QMainWindow):
         if not fname: 
             logger.info("Audio save cancelled by user")
             return
-        logger.info(f"Saving audio to: {fname}")
-        t = np.arange(0, self.num_seconds, 1/self.Fs)
-        x = np.zeros_like(t)
-        for n in range(self.num_harmonics):
-            x += self.amplitudes[n] * np.sin(2*np.pi*(n+1)*self.f0*t + self.phases[n])
-        denom = np.max(np.abs(x)) + 0.05
-        x = (x / denom).astype(np.float32)
         path = fname
         if _SCIPY_WAV_OK:
+            logger.debug(f"Saving audio to: {fname}")
+            t = np.arange(0, self.num_seconds, 1/self.Fs)
+            x = np.zeros_like(t)
+            for n in range(self.num_harmonics):
+                x += self.amplitudes[n] * np.sin(2*np.pi*(n+1)*self.f0*t + self.phases[n])
+            denom = np.max(np.abs(x)) + 0.05
+            x = (x / denom).astype(np.float32)
             wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
             logger.info(f"Successfully saved WAV file: {path}")
             QMessageBox.information(self, "Audio", f"Saved WAV to:\n{path}")

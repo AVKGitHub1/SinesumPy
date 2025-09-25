@@ -380,6 +380,12 @@ class SineSumApp:
         
         path = fname
         if _SCIPY_WAV_OK:
+            t = np.arange(0, self.num_seconds, 1/self.Fs)
+            x = np.zeros_like(t)
+            for n in range(self.num_harmonics):
+                x += self.amplitudes[n] * np.sin(2*np.pi*(n+1)*self.f0*t + self.phases[n])
+            denom = np.max(np.abs(x)) + 0.05
+            x = (x / denom).astype(np.float32)
             wavfile.write(path, self.Fs, (x * 32767).astype(np.int16))
             logger.info(f"Wrote WAV file using scipy: {os.path.abspath(path)}")
         else:
