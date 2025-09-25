@@ -1,6 +1,7 @@
 # data files
 *.json
 *.csv
+*.wav
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
