@@ -60,6 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+MAX_HARMONICS = 10  # limit to avoid UI overload
 
 def zero_line(ax):
     ax.axhline(0, color="k", ls="--", lw=0.8)
@@ -172,81 +173,107 @@ class SineSumWindow(QMainWindow):
         root.addLayout(bottom, stretch=2)
 
         # LEFT controls group
-        controls = QGroupBox("Controls")
+        controls = QGroupBox("Harmonic Controls")
         controls.setStyleSheet("QGroupBox { font-weight: bold; }")
         controls.setSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred,
                                QtWidgets.QSizePolicy.Policy.Preferred)
-        bottom.addWidget(controls, stretch=3)  # smaller than table
+        bottom.addWidget(controls, stretch=2)  # smaller than table
         grid = QGridLayout(controls)
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
         row = 0
 
         # Row A: Start Over with [N]
-        self.btn_start = QPushButton("Start Over"); self.btn_start.setFixedWidth(100)
-        self.spin_N = QSpinBox(); self.spin_N.setRange(1, 999); self.spin_N.setValue(self.num_harmonics); self.spin_N.setFixedWidth(70)
-        grid.addWidget(self.btn_start, row, 0)
-        grid.addWidget(QLabel("with"), row, 1)
-        grid.addWidget(self.spin_N, row, 2)
-        grid.addWidget(QLabel("harmonics"), row, 3)
+        start_row = QHBoxLayout(); start_row.setSpacing(3); start_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.btn_start = QPushButton("Start Over"); self.btn_start.setFixedWidth(70)
+        self.spin_N = QSpinBox(); self.spin_N.setRange(1, MAX_HARMONICS); self.spin_N.setValue(self.num_harmonics); self.spin_N.setFixedWidth(80)
+        start_row.addWidget(self.btn_start)
+        start_row.addWidget(QLabel("with"))
+        start_row.addWidget(self.spin_N)
+        start_row.addWidget(QLabel("harmonics"))
+        grid.addLayout(start_row, row, 0, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         row += 1
 
         # Row B: Adjusting Harmonic Number
         grid.addWidget(QLabel("Adjusting Harmonic Number:"), row, 0, 1, 4)
         row += 1
-        self.btn_prev = QPushButton("Previous"); self.btn_prev.setFixedWidth(90)
-        self.combo_k = QComboBox(); self.combo_k.setFixedWidth(80)
+        adjust_row = QHBoxLayout(); adjust_row.setSpacing(3); adjust_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.btn_prev = QPushButton("Previous"); self.btn_prev.setFixedWidth(70)
+        self.combo_k = QComboBox(); self.combo_k.setFixedWidth(50)
         self.btn_next = QPushButton("Next"); self.btn_next.setFixedWidth(70)
-        grid.addWidget(self.btn_prev, row, 0)
-        grid.addWidget(self.combo_k, row, 1, 1, 2)
-        grid.addWidget(self.btn_next, row, 3)
+        adjust_row.addWidget(self.btn_prev)
+        adjust_row.addWidget(self.combo_k)
+        adjust_row.addWidget(self.btn_next)
+        grid.addLayout(adjust_row, row, 0, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         row += 1
 
         # Row C: Amplitude
-        grid.addWidget(QLabel("Adjust Amplitude:"), row, 0, 1, 4)
+        grid.addWidget(QLabel("Adjust Amplitude:"), row, 0, 1, 3)
         row += 1
-        self.slider_amp = QSlider(Qt.Orientation.Horizontal); self.slider_amp.setRange(0, 200)
+        self.slider_amp = QSlider(Qt.Orientation.Horizontal); self.slider_amp.setRange(0, 100)
         self.edit_amp = QLineEdit("0.0"); self.edit_amp.setFixedWidth(90)
-        grid.addWidget(self.slider_amp, row, 0, 1, 3)
-        grid.addWidget(self.edit_amp, row, 3)
+        grid.addWidget(self.slider_amp, row, 0, 1, 2)
+        grid.addWidget(self.edit_amp, row, 2)
         row += 1
 
         # Row D: Phase
-        grid.addWidget(QLabel("Adjust Phase:"), row, 0, 1, 4)
+        grid.addWidget(QLabel("Adjust Phase:"), row, 0, 1, 3)
         row += 1
         self.slider_phase = QSlider(Qt.Orientation.Horizontal); self.slider_phase.setRange(0, 6283)
         self.edit_phase = QLineEdit("0.0"); self.edit_phase.setFixedWidth(90)
-        grid.addWidget(self.slider_phase, row, 0, 1, 3)
-        grid.addWidget(self.edit_phase, row, 3)
+        grid.addWidget(self.slider_phase, row, 0, 1, 2)
+        grid.addWidget(self.edit_phase, row, 2)
         row += 1
 
         # Row E: Save/Load/About + Play
-        btn_row = QHBoxLayout()
-        self.btn_save = QPushButton("Save"); self.btn_save.setFixedWidth(70)
-        self.btn_load = QPushButton("Load"); self.btn_load.setFixedWidth(70)
-        self.btn_about = QPushButton("About"); self.btn_about.setFixedWidth(70)
-        self.btn_play = QPushButton("Play Sound"); self.btn_play.setFixedWidth(110)
-        self.btn_save_sound = QPushButton("Save WAV"); self.btn_save_sound.setFixedWidth(90)
-        btn_row.addWidget(self.btn_save); btn_row.addWidget(self.btn_load); btn_row.addWidget(self.btn_about)
-        btn_row.addStretch(1)
-        btn_row.addWidget(self.btn_play)
-        btn_row.addWidget(self.btn_save_sound)
-        grid.addLayout(btn_row, row, 0, 1, 4)
 
-        # RIGHT: Big table
-        right_box = QGroupBox("Harmonics")
-        right_box.setStyleSheet("QGroupBox { font-weight: bold; }")
-        bottom.addWidget(right_box, stretch=5)  # larger than controls
-        v = QVBoxLayout(right_box)
+        # Middle: Big table
+        mid_box = QGroupBox("Harmonics")
+        mid_box.setStyleSheet("QGroupBox { font-weight: bold; }")
+        bottom.addWidget(mid_box, stretch=3)  # larger than controls
+        v = QVBoxLayout(mid_box)
         self.table = QTableWidget(self.num_harmonics, 3)
         self.table.setHorizontalHeaderLabels(["Harmonic", "Amplitude", "Phase"])
+        header = self.table.horizontalHeader()
+        for col in range(self.table.columnCount()):
+            header.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setMinimumHeight(160)
+        self.table.setMinimumHeight(200)
+        self.table.setMinimumWidth(340)
         self.table.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding,
                                  QtWidgets.QSizePolicy.Policy.Expanding)
-        v.addWidget(self.table)
+        v.addWidget(self.table, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        # Right: Sound and About buttons
+        R_box = QGroupBox("Config \ Sound")
+        R_box.setStyleSheet("QGroupBox { font-weight: bold; }")
+        bottom.addWidget(R_box, stretch=2)  # smaller than table
+        grid2 = QGridLayout(R_box)
+        grid2.setHorizontalSpacing(5)
+        grid2.setVerticalSpacing(6)
+
+        config_row = QHBoxLayout()
+        self.btn_save = QPushButton("Save Values"); self.btn_save.setFixedWidth(100); self.btn_save.setFixedHeight(70)
+        self.btn_load = QPushButton("Load Values"); self.btn_load.setFixedWidth(100); self.btn_load.setFixedHeight(70)
+        config_row.addWidget(self.btn_save)
+        config_row.addSpacing(10)
+        config_row.addWidget(self.btn_load)
+        grid2.addLayout(config_row, 0, 1, 1, 1, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        sound_row = QHBoxLayout()
+        self.btn_play = QPushButton("Play Sound"); self.btn_play.setFixedWidth(100); self.btn_play.setFixedHeight(70)
+        self.btn_save_sound = QPushButton("Save Audio"); self.btn_save_sound.setFixedWidth(100); self.btn_save_sound.setFixedHeight(70)
+        sound_row.addWidget(self.btn_play)
+        sound_row.addSpacing(10)
+        sound_row.addWidget(self.btn_save_sound)
+        grid2.addLayout(sound_row, 1, 1, 1, 1, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        self.btn_about = QPushButton("About"); self.btn_about.setFixedWidth(100); self.btn_about.setFixedHeight(30)
+        grid2.addWidget(self.btn_about, 2, 1, 1, 1, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+        
 
         # wire up
         self.btn_start.clicked.connect(self.on_start_over)
@@ -291,6 +318,8 @@ class SineSumWindow(QMainWindow):
             self.table.setItem(r, 1, QTableWidgetItem(f"{self.amplitudes[r]:.4f}"))
             self.table.setItem(r, 2, QTableWidgetItem(f"{self.phases[r]:.4f}"))
         self.table.resizeColumnsToContents()
+        for col in range(self.table.columnCount()):
+            self.table.setColumnWidth(col, self.table.columnWidth(col) + 50)  # Add padding
         self.table.selectRow(self.k0)
 
     def _sync_controls(self):

@@ -100,7 +100,7 @@ class SineSumApp:
         # --- Sliders row (amplitude left, phase right) ---
         self.ax_label_amp = self.fig.add_axes([0.20, 0.78, 0.18, 0.04]); self.ax_label_amp.axis("off")
         self.ax_label_amp.text(0, 0.5, "Adjust Amplitude:", va="center", fontsize=10)
-        self.s_amp = Slider(self.fig.add_axes([0.20, 0.755, 0.26, 0.03]), "", 0.0, 2.0, valinit=0.0)
+        self.s_amp = Slider(self.fig.add_axes([0.20, 0.755, 0.26, 0.03]), "", 0.0, 1.0, valinit=0.0)
         self.tb_amp = TextBox(self.fig.add_axes([0.50, 0.755, 0.08, 0.032]), "", initial="0")
 
         self.ax_label_ph = self.fig.add_axes([0.60, 0.78, 0.15, 0.04]); self.ax_label_ph.axis("off")
